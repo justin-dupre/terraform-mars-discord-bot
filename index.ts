@@ -1,8 +1,8 @@
-process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
 import { Client as DiscordClient, GatewayIntentBits } from "discord.js";
 import { Client as PostgresClient } from "pg";
 import dotenv from "dotenv";
 import { GameResult, Score } from "./types";
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
 
 dotenv.config({ path: __dirname + "/.env" });
 
