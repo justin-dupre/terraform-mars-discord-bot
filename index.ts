@@ -1,8 +1,8 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import {
   ActionRowBuilder,
   Client as DiscordClient,
   GatewayIntentBits,
-  Interaction,
   SelectMenuBuilder,
 } from "discord.js";
 import { Client as PostgresClient } from "pg";
@@ -33,9 +33,10 @@ discordClient.on("ready", async () => {
   console.log(`Logged in as ${discordClient.user.tag}!`);
 });
 
-discordClient.on("interactionCreate", async (interaction) => {
+discordClient.on<any>("interactionCreate", async (interaction) => {
   if (interaction.toJSON()?.customId === "selectedCorp") {
-    const corpName = interaction.toJSON()?.values[0];
+    const json = interaction.toJSON();
+    const corpName = json?.values[0];
     const totalGamesWonByCorpResult = await pgClient.query(
       GET_CORP_TOTAL_WINS(corpName)
     );
@@ -50,8 +51,6 @@ discordClient.on("interactionCreate", async (interaction) => {
       return;
     }
 
-    console.log(corpWins, totalGamesPlayedByCorp);
-
     await interaction.reply(
       `${corpName} has a ${((corpWins / totalGamesPlayedByCorp) * 100).toFixed(
         2
@@ -61,9 +60,6 @@ discordClient.on("interactionCreate", async (interaction) => {
   if (!interaction.isChatInputCommand()) return;
 
   if (interaction.commandName === "get-corp-win-rate") {
-    console.log(createCorpSelectOptions());
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const row = new ActionRowBuilder<any>().addComponents(
       new SelectMenuBuilder()
         .setCustomId("selectedCorp")
