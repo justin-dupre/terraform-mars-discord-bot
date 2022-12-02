@@ -1,10 +1,20 @@
-import { Client as DiscordClient, GatewayIntentBits } from "discord.js";
+import {
+  ActionRowBuilder,
+  Client as DiscordClient,
+  GatewayIntentBits,
+  Interaction,
+  SelectMenuBuilder,
+} from "discord.js";
 import { Client as PostgresClient } from "pg";
 import dotenv from "dotenv";
-import { GameResult, Score } from "./types";
+import {
+  GET_CORP_TOTAL_WINS,
+  GET_TOTAL_GAMES_PLAYED_BY_CORP_QUERY,
+} from "./queries";
+import { createCorpSelectOptions } from "./corps";
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
 
-dotenv.config({ path: __dirname + "/.env" });
+dotenv.config();
 
 const discordClient = new DiscordClient({
   intents: [GatewayIntentBits.Guilds],
@@ -24,54 +34,45 @@ discordClient.on("ready", async () => {
 });
 
 discordClient.on("interactionCreate", async (interaction) => {
+  if (interaction.toJSON()?.customId === "selectedCorp") {
+    const corpName = interaction.toJSON()?.values[0];
+    const totalGamesWonByCorpResult = await pgClient.query(
+      GET_CORP_TOTAL_WINS(corpName)
+    );
+    const corpWins = totalGamesWonByCorpResult.rows[0]?.count ?? 0;
+
+    const totalGamesQueryResult = await pgClient.query(
+      GET_TOTAL_GAMES_PLAYED_BY_CORP_QUERY(corpName)
+    );
+    const totalGamesPlayedByCorp = totalGamesQueryResult.rows[0]?.count ?? 0;
+    if (totalGamesPlayedByCorp === 0) {
+      await interaction.reply(`No games played by ${corpName}`);
+      return;
+    }
+
+    console.log(corpWins, totalGamesPlayedByCorp);
+
+    await interaction.reply(
+      `${corpName} has a ${((corpWins / totalGamesPlayedByCorp) * 100).toFixed(
+        2
+      )}% win rate with ${totalGamesPlayedByCorp} games played`
+    );
+  }
   if (!interaction.isChatInputCommand()) return;
 
-  if (interaction.commandName === "ping") {
-    pgClient.query<GameResult>(
-      "SELECT * from game_results",
-      async (err, res) => {
-        if (err) throw err;
-        const winnerOfEachGame = getWinnerOfEachGame(res.rows, res.rowCount);
-        const results = getWinsByCorps(winnerOfEachGame);
-        await interaction.reply(results);
-        pgClient.end();
-      }
+  if (interaction.commandName === "get-corp-win-rate") {
+    console.log(createCorpSelectOptions());
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const row = new ActionRowBuilder<any>().addComponents(
+      new SelectMenuBuilder()
+        .setCustomId("selectedCorp")
+        .setPlaceholder("Select a corp")
+        .addOptions(createCorpSelectOptions())
     );
+
+    await interaction.reply({ components: [row] });
   }
 });
 
 discordClient.login(process.env.DISCORD_TOKEN);
-
-const getWinnerOfEachGame = (rows: GameResult[], rowCount: number): Score[] => {
-  const res: Score[] = [];
-  for (let i = 0; i < rowCount; i++) {
-    const scores: Score[] = JSON.parse(rows[i].scores);
-    const max = scores.reduce(function (prev, current) {
-      return prev.playerScore > current.playerScore ? prev : current;
-    });
-
-    res.push(max);
-  }
-  return res;
-};
-
-const getWinsByCorps = (scores: Score[]) => {
-  const sortedScores = scores.sort((a, b) => a.playerScore - b.playerScore);
-  const count = {};
-  sortedScores.forEach((score) => {
-    const { corporation } = score;
-    // eslint-disable-next-line no-prototype-builtins
-    if (count.hasOwnProperty(corporation)) {
-      count[corporation] = count[corporation] + 1;
-    } else {
-      count[corporation] = 1;
-    }
-  });
-
-  let formattedString = "";
-  for (const key of Object.keys(count)) {
-    formattedString += `${key}: ${count[key]}\n`;
-  }
-
-  return formattedString;
-};
